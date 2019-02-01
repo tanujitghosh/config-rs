@@ -3,6 +3,7 @@
 extern crate config;
 extern crate float_cmp;
 extern crate serde;
+extern crate clap;
 
 #[macro_use]
 extern crate serde_derive;
@@ -10,6 +11,7 @@ extern crate serde_derive;
 use config::*;
 use float_cmp::ApproxEqUlps;
 use std::collections::HashMap;
+use clap::{App, Arg};
 
 #[derive(Debug, Deserialize)]
 struct Place {
@@ -84,4 +86,20 @@ fn test_error_parse() {
         res.unwrap_err().to_string(),
         "invalid number at line 2 in tests/Settings-invalid.toml".to_string()
     );
+}
+
+#[test]
+fn test_merge_args(){
+    let mut c = make();
+    let args = App::new("testapp").arg(Arg::with_name("conf").short("c").multiple(true).takes_value(true))
+        .get_matches_from(vec!["testapp","-c", "production=true", "-c", "code=60"]);
+
+    c.merge_args(args, "conf");
+
+    // Deserialize the entire file as single struct
+    let s: Settings = c.try_into().unwrap();
+
+    assert_eq!(s.production, Some("true".to_string()));
+    assert_eq!(s.code.0, 60);
+
 }

@@ -1,5 +1,6 @@
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
+use clap::ArgMatches;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -40,7 +41,7 @@ impl Default for ConfigKind {
 /// A prioritized configuration repository. It maintains a set of
 /// configuration sources, fetches values to populate those, and provides
 /// them according to the source's priority.
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Config {
     kind: ConfigKind,
 
@@ -48,12 +49,18 @@ pub struct Config {
     pub cache: Value,
 }
 
+impl Default for Config{
+    fn default() -> Self{
+        Config {
+            kind : ConfigKind::default(),
+            cache: HashMap::<String, Value>::new().into(),
+        }
+    }
+}
+
 impl Config {
     pub fn new() -> Self {
-        let mut c = Config::default();
-        c.merge(File::from_str("", FileFormat::Toml));
-
-        c
+        Config::default()
     }
 
     /// Merge in a configuration property source.
@@ -76,6 +83,38 @@ impl Config {
 
         self.refresh()
     }
+
+    //Merge in clap app matches
+    pub fn merge_args(&mut self, args: ArgMatches, arg_name: &str) -> Result<&mut Config>
+    {
+        match self.kind {
+            ConfigKind::Mutable {
+                ref mut overrides, ..
+            } => {
+                if let Some(val) = args.values_of(arg_name){
+                    for v in val {
+                        if v.contains("="){
+                            let kv : Vec<&str> = v.split("=").collect();
+                            if kv.len() == 2 {
+                                overrides.insert(
+                                path::Expression::Identifier(String::from(*kv.get(0).unwrap())),
+                                Value::new(Some(&"override".to_string()),
+                                           String::from(*kv.get(1).unwrap()))
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            ConfigKind::Frozen => {
+                return Err(ConfigError::Frozen);
+            }
+        }
+
+        self.refresh()
+    }
+
 
     /// Refresh the configuration cache with fresh
     /// data from added sources.
